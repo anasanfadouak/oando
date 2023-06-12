@@ -1,0 +1,167 @@
+
+    public function createPayment(Request $request)
+    {
+
+        $this->apiContext = new ApiContext(
+            new OAuthTokenCredential(
+                env('PAYPAL_CLIENT_ID'),     // Client ID
+                env('PAYPAL_SECRET')  // Secret
+            )
+        );
+
+        $this->apiContext->setConfig(
+            array(
+                'mode' => 'sandbox', // or 'live' for real transactions
+                'http.ConnectionTimeOut' => 30,
+                'log.LogEnabled' => true,
+                'log.FileName' => storage_path('logs/paypal.log'),
+                'log.LogLevel' => 'ERROR',
+            )
+        );
+        $payer = new Payer();
+        $payer->setPaymentMethod('paypal');
+
+        $items = [];
+     foreach($request->input('items') as $itemData) {
+        $item = new Item();
+        $item->setName($itemData['name'])
+            ->setCurrency('USD')
+            ->setQuantity($itemData['quantity'])
+            ->setPrice($itemData['price']);
+
+        $items[] = $item;
+     }
+
+     $itemList = new ItemList();
+     $itemList->setItems($items);
+       
+
+        
+        $details = new Details();
+        $details->setShipping(0)
+            ->setTax(0)
+            ->setSubtotal($request->amount);
+
+        $amount = new Amount();
+        $amount->setCurrency('USD')
+            ->setTotal($request->amount)
+            ->setDetails($details);
+
+        $transaction = new Transaction();
+        $transaction->setAmount($amount)
+            ->setItemList($itemList)
+            ->setDescription('Your transaction description');
+
+        $redirectUrls = new RedirectUrls();
+        $redirectUrls->setReturnUrl(route('execute-payment')) // route after successful payment
+            ->setCancelUrl(route('cancel-payment')); // route after cancellation
+
+        $payment = new Payment();
+        $payment->setIntent('sale')
+            ->setPayer($payer)
+            ->setRedirectUrls($redirectUrls)
+            ->setTransactions([$transaction]);
+            /*dd($this->apiContext);*/
+            dd($payment);
+        try {
+            $payment->create($this->apiContext);
+        } catch (Exception $ex) {
+            exit(1);
+        }
+
+        return redirect()->away($payment->getApprovalLink());
+     }
+     @foreach($cart as $productId => $productDetails)
+                <input type="hidden" name="items[{{ $productId }}][name]" value="{{ $productDetails['name'] }}">
+                <input type="hidden" name="items[{{ $productId }}][quantity]" value="{{ $productDetails['quantity'] }}">
+                <input type="hidden" name="items[{{ $productId }}][price]" value="{{ $productDetails['price'] }}">
+                @endforeach
+
+                $orders = App\Models\Order::all();
+    $yearlySales = App\Models\Order::calculateYearlySales($orders);
+    $yearlyPercentageChange = App\Models\Order::calculateYearlyPercentageChange($orders); 
+    $monthlyEarnings = App\Models\Order::calculateMonthlyEarnings($orders); 
+    $monthlyPercentageChange = App\Models\Order::calculateMonthlyPercentageChange($orders); 
+
+    return view('dashboard.index', [
+        'yearlySales' => $yearlySales,
+        'yearlyPercentageChange' => $yearlyPercentageChange,
+        'monthlyEarnings' => $monthlyEarnings,
+        'monthlyPercentageChange' => $monthlyPercentageChange,
+    ]);
+
+
+
+    public static function  calculateYearlySales($orders)
+     {
+        $currentYear = date('Y');
+        $yearlySales = 0;
+    
+        foreach ($orders as $order) {
+            if ($order->date->format('Y') == $currentYear) {
+                $yearlySales += $order->total;
+            }
+        }
+    
+        return $yearlySales;
+    }
+    public static function  calculateYearlyPercentageChange($orders) {
+        $currentYear = date('Y');
+        $previousYear = $currentYear - 1;
+    
+        $currentYearSales = 0;
+        $previousYearSales = 0;
+    
+        foreach ($orders as $order) {
+            if ($order->date->format('Y') == $currentYear) {
+                $currentYearSales += $order->total;
+            } else if ($order->date->format('Y') == $previousYear) {
+                $previousYearSales += $order->total;
+            }
+        }
+    
+        if ($previousYearSales == 0) {
+            return 0;
+        }
+    
+        $percentageChange = (($currentYearSales - $previousYearSales) / $previousYearSales) * 100;
+    
+        return $percentageChange;
+    }
+    public static function  calculateMonthlyEarnings($orders) {
+        $currentYear = date('Y');
+        $currentMonth = date('m');
+        $monthlyEarnings = 0;
+    
+        foreach ($orders as $order) {
+            if ($order->date->format('Y') == $currentYear && $order->date->format('m') == $currentMonth) {
+                $monthlyEarnings += $order->total;
+            }
+        }
+    
+        return $monthlyEarnings;
+    }
+    public static function  calculateMonthlyPercentageChange($orders) {
+        $currentYear = date('Y');
+        $currentMonth = date('m');
+        $previousMonth = $currentMonth - 1;
+    
+        $currentMonthEarnings = 0;
+        $previousMonthEarnings = 0;
+    
+        foreach ($orders as $order) {
+            if ($order->date->format('Y') == $currentYear && $order->date->format('m') == $currentMonth) {
+                $currentMonthEarnings += $order->total;
+            } else if ($order->date->format('Y') == $currentYear && $order->date->format('m') == $previousMonth) {
+                $previousMonthEarnings += $order->total;
+            }
+        }
+    
+        if ($previousMonthEarnings == 0) {
+            return 0;
+        }
+    
+        $percentageChange = (($currentMonthEarnings - $previousMonthEarnings) / $previousMonthEarnings) * 100;
+    
+        return $percentageChange;
+    }
